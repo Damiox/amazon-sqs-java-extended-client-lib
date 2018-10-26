@@ -265,6 +265,38 @@ public class AmazonSQSExtendedClientTest {
         Assert.assertEquals("receipt-handle", deleteMessageRequestArgumentCaptor.getValue().getReceiptHandle());
     }
 
+    @Test
+    public void testWhenIgnorePayloadNotFoundIsNotSentThenNotFoundKeysInS3AreNotDeletedInSQS() throws Exception {
+        ExtendedClientConfiguration extendedClientConfiguration = new ExtendedClientConfiguration()
+            .withLargePayloadSupportEnabled(mockS3, S3_BUCKET_NAME);
+
+        AmazonServiceException mockException = mock(AmazonServiceException.class);
+        when(mockException.getErrorCode()).thenReturn("NoSuchKey");
+
+        Message mockMessage = mock(Message.class);
+        MessageS3Pointer messageS3Pointer = new MessageS3Pointer();
+        when(mockMessage.getBody()).thenReturn(new JsonDataConverter().serializeToJson(messageS3Pointer));
+        when(mockMessage.getReceiptHandle()).thenReturn("receipt-handle");
+        Map<String, MessageAttributeValue> messageAttributes = new HashMap<>();
+        messageAttributes.put(SQSExtendedClientConstants.RESERVED_ATTRIBUTE_NAME, new MessageAttributeValue());
+        when(mockMessage.getMessageAttributes()).thenReturn(messageAttributes);
+
+        ReceiveMessageResult mockReceiveMessageResult = mock(ReceiveMessageResult.class);
+        when(mockSqsBackend.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(mockReceiveMessageResult);
+        when(mockReceiveMessageResult.getMessages()).thenReturn(Collections.singletonList(mockMessage));
+
+        doThrow(mockException).when(mockS3).getObject(any(GetObjectRequest.class));
+
+        AmazonSQS sqsExtended = spy(new AmazonSQSExtendedClient(mockSqsBackend, extendedClientConfiguration));
+
+        try {
+            sqsExtended.receiveMessage(SQS_QUEUE_URL);
+            Assert.fail("exception should have been thrown");
+        } catch (AmazonServiceException e) {
+            verify(mockSqsBackend, never()).deleteMessage(any(DeleteMessageRequest.class));
+        }
+    }
+
     private String generateStringWithLength(int messageLength) {
         char[] charArray = new char[messageLength];
         Arrays.fill(charArray, 'x');

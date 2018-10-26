@@ -369,7 +369,8 @@ public class AmazonSQSExtendedClient extends AmazonSQSExtendedClientBase impleme
 				try {
 					origMsgBody = getTextFromS3(s3MsgBucketName, s3MsgKey);
 				} catch (AmazonServiceException e) {
-					if (((AmazonServiceException) e.getCause()).getErrorCode().equals("NoSuchKey")) {
+					if (((AmazonServiceException) e.getCause()).getErrorCode().equals("NoSuchKey")
+						&& clientConfiguration.isIgnorePayloadNotFound()) {
 						deleteMessage(receiveMessageRequest.getQueueUrl(), message.getReceiptHandle());
 						LOG.warn("SQS message deleted as it could not be found in S3");
 						continue;
